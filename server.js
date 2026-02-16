@@ -5,96 +5,90 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(__dirname, 'sms_logs.json');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 1. Home Page - Hacker Entry
+// Helper function to read/write JSON
+const getLogs = () => {
+    if (!fs.existsSync(DATA_FILE)) return [];
+    try {
+        const data = fs.readFileSync(DATA_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (e) { return []; }
+};
+
+const saveLogs = (logs) => {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(logs, null, 2));
+};
+
+// 1. Home Route
 app.get('/', (req, res) => {
-    res.send(`
-        <body style="background:#000; color:#0f0; font-family:monospace; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh;">
-            <h1 style="border-right: 2px solid #0f0; white-space: nowrap; overflow: hidden; animation: typing 2s steps(30, end);">[ SYSTEM ONLINE: SMS_RECEIVER_V1 ]</h1>
-            <p>ACCESS GRANTED. GO TO <a href="/view-sms" style="color:#fff;">/view-sms</a> TO DECRYPT DATA.</p>
-            <style>
-                @keyframes typing { from { width: 0 } to { width: 100% } }
-            </style>
-        </body>
-    `);
+    res.send('<body style="background:#000;color:#0f0;font-family:monospace;padding:50px;"><h1>[ SYSTEM READY ]</h1><p>Endpoint: /view-sms</p></body>');
 });
 
-// 2. Receive SMS - Data Logger
+// 2. Receive SMS (Saves to JSON)
 app.post('/receive', (req, res) => {
     const { sender, message } = req.body;
     if (sender && message) {
-        // Data ko comma-separated format mein save kar rahe hain taaki table mein dikha sakein
-        const timestamp = new Date().toLocaleString();
-        const logEntry = `${timestamp}||${sender}||${message}\n`;
+        const logs = getLogs();
+        const newEntry = {
+            id: Date.now(),
+            timestamp: new Date().toLocaleString(),
+            sender: sender,
+            message: message.replace(/\n/g, " ") // Multi-line fix
+        };
         
-        fs.appendFile('sms_logs.txt', logEntry, (err) => {
-            if (err) return res.status(500).send("IO_ERROR");
-            console.log(`[+] Captured: ${sender}`);
-            res.status(200).send("ENCRYPTED_AND_SAVED");
-        });
+        logs.push(newEntry);
+        saveLogs(logs);
+        
+        console.log(`[+] Intercepted: ${sender}`);
+        res.status(200).send("DATA_STASHED");
     } else {
-        res.status(400).send("INVALID_PAYLOAD");
+        res.status(400).send("BAD_PAYLOAD");
     }
 });
 
-// 3. View SMS - Hacker Terminal UI
-// ... (baaki code same rahega, sirf view-sms route ko replace karein)
-
+// 3. View SMS (JSON to Hacker Table)
 app.get('/view-sms', (req, res) => {
-    fs.readFile('sms_logs.txt', 'utf8', (err, data) => {
-        let rows = "";
-        if (!err && data) {
-            const lines = data.trim().split('\n');
-            lines.reverse().forEach(line => {
-                // Agar line mein || nahi hai (purana format), toh usse handle karein
-                if (line.includes('||')) {
-                    const parts = line.split('||');
-                    const time = parts[0] || "N/A";
-                    const from = parts[1] || "UNKNOWN";
-                    const msg = parts[2] || "EMPTY_MSG";
-                    
-                    rows += `
-                        <tr style="border-bottom: 1px solid #030;">
-                            <td style="padding:12px; color:#888; font-size:0.9em;">${time}</td>
-                            <td style="padding:12px; color:#0f0; font-weight:bold; letter-spacing:1px;">${from}</td>
-                            <td style="padding:12px; color:#0a0; line-height:1.4;">${msg}</td>
-                        </tr>`;
-                } else if (line.trim().length > 0) {
-                    // Purane format ke liye single row
-                    rows += `
-                        <tr style="border-bottom: 1px solid #300;">
-                            <td colspan="3" style="padding:10px; color:#f00; font-size:0.8em;">[OLD_FORMAT_DATA]: ${line}</td>
-                        </tr>`;
-                }
-            });
-        }
+    const logs = getLogs().reverse(); // Newest first
+    
+    let rows = logs.map(log => `
+        <tr style="border-bottom: 1px solid #030;">
+            <td style="padding:15px; color:#555;">${log.timestamp}</td>
+            <td style="padding:15px; color:#0f0; font-weight:bold;">${log.sender}</td>
+            <td style="padding:15px; color:#0d0;">${log.message}</td>
+        </tr>
+    `).join('');
 
-        res.send(`
-        <body style="background:#050505; color:#0f0; font-family:'Courier New', monospace; padding:20px; margin:0;">
-            <div style="max-width: 1200px; margin: auto;">
-                <h2 style="text-shadow: 0 0 10px #0f0; color:#0f0;">> TERMINAL_SMS_DECRYPTOR v2.0</h2>
-                <div style="background:#0a0; color:#000; padding:5px 10px; font-weight:bold; display:inline-block; margin-bottom:20px;">SYSTEM_STATUS: STABLE</div>
-                
-                <table style="width:100%; border-collapse: collapse; border: 1px solid #0f0; box-shadow: 0 0 20px rgba(0,255,0,0.1);">
-                    <thead>
-                        <tr style="background:#0f0; color:#000; text-align:left; text-transform:uppercase;">
-                            <th style="padding:15px; border: 1px solid #000;">Timestamp</th>
-                            <th style="padding:15px; border: 1px solid #000;">Source_Node</th>
-                            <th style="padding:15px; border: 1px solid #000;">Data_Payload</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows || '<tr><td colspan="3" style="text-align:center; padding:30px; color:#050;">AWAITING INCOMING TRANSMISSION...</td></tr>'}
-                    </tbody>
-                </table>
-                <br>
-                <button onclick="location.reload()" style="background:transparent; color:#0f0; border:1px solid #0f0; padding:10px 25px; cursor:pointer; font-family:monospace; font-weight:bold; transition: 0.3s;" onmouseover="this.style.background='#0f0'; this.style.color='#000';" onmouseout="this.style.background='transparent'; this.style.color='#0f0';"> [ REFRESH_SYSTEM ] </button>
-            </div>
-        </body>
-        `);
-    });
+    res.send(`
+    <body style="background:#050505; color:#0f0; font-family:'Courier New', monospace; padding:20px;">
+        <div style="border:1px solid #0f0; padding:20px; box-shadow: 0 0 20px #050;">
+            <h1 style="text-shadow: 0 0 10px #0f0;">> SMS_DATABASE_DECRYPTED</h1>
+            <p style="color:#0a0;">SOURCE_FILE: sms_logs.json | STATUS: ACTIVE</p>
+            <hr style="border:0.5px solid #050;">
+            <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+                <tr style="background:#0f0; color:#000; text-transform:uppercase;">
+                    <th style="padding:12px; text-align:left;">Time</th>
+                    <th style="padding:12px; text-align:left;">Sender</th>
+                    <th style="padding:12px; text-align:left;">Message</th>
+                </tr>
+                ${rows || '<tr><td colspan="3" style="text-align:center; padding:50px; color:#030;">NO DATA IN DATABASE.</td></tr>'}
+            </table>
+            <br>
+            <button onclick="location.reload()" style="background:#0f0; color:#000; border:none; padding:10px 25px; font-weight:bold; cursor:pointer;">[ REFRESH ]</button>
+            <form action="/clear-logs" method="GET" style="display:inline;">
+                <button type="submit" style="background:#f00; color:#fff; border:none; padding:10px 25px; font-weight:bold; cursor:pointer; margin-left:10px;">[ WIPE_DATABASE ]</button>
+            </form>
+        </div>
+    </body>
+    `);
 });
 
-app.listen(PORT, () => console.log(`[!] Hacker Server Live on Port ${PORT}`));
+// 4. Clear Logs Route (Wipe DB)
+app.get('/clear-logs', (req, res) => {
+    saveLogs([]);
+    res.redirect('/view-sms');
+});
+
+app.listen(PORT, () => console.log(`SYSTEM_UP_ON_${PORT}`));
