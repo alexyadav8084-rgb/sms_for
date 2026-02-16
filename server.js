@@ -40,41 +40,58 @@ app.post('/receive', (req, res) => {
 });
 
 // 3. View SMS - Hacker Terminal UI
+// ... (baaki code same rahega, sirf view-sms route ko replace karein)
+
 app.get('/view-sms', (req, res) => {
     fs.readFile('sms_logs.txt', 'utf8', (err, data) => {
         let rows = "";
-        if (!err) {
+        if (!err && data) {
             const lines = data.trim().split('\n');
             lines.reverse().forEach(line => {
-                const [time, from, msg] = line.split('||');
-                rows += `
-                    <tr style="border-bottom: 1px solid #030;">
-                        <td style="padding:10px; color:#888;">${time}</td>
-                        <td style="padding:10px; color:#0f0; font-weight:bold;">${from}</td>
-                        <td style="padding:10px; color:#0a0;">${msg}</td>
-                    </tr>`;
+                // Agar line mein || nahi hai (purana format), toh usse handle karein
+                if (line.includes('||')) {
+                    const parts = line.split('||');
+                    const time = parts[0] || "N/A";
+                    const from = parts[1] || "UNKNOWN";
+                    const msg = parts[2] || "EMPTY_MSG";
+                    
+                    rows += `
+                        <tr style="border-bottom: 1px solid #030;">
+                            <td style="padding:12px; color:#888; font-size:0.9em;">${time}</td>
+                            <td style="padding:12px; color:#0f0; font-weight:bold; letter-spacing:1px;">${from}</td>
+                            <td style="padding:12px; color:#0a0; line-height:1.4;">${msg}</td>
+                        </tr>`;
+                } else if (line.trim().length > 0) {
+                    // Purane format ke liye single row
+                    rows += `
+                        <tr style="border-bottom: 1px solid #300;">
+                            <td colspan="3" style="padding:10px; color:#f00; font-size:0.8em;">[OLD_FORMAT_DATA]: ${line}</td>
+                        </tr>`;
+                }
             });
         }
 
         res.send(`
-        <body style="background:#050505; color:#0f0; font-family:'Courier New', monospace; padding:20px;">
-            <h2 style="text-shadow: 0 0 10px #0f0;">> TERMINAL_SMS_LOGS:</h2>
-            <hr style="border:1px solid #0f0;">
-            <table style="width:100%; border-collapse: collapse; margin-top:20px;">
-                <thead>
-                    <tr style="background:#0a0; color:#000; text-align:left;">
-                        <th style="padding:10px;">TIMESTAMP</th>
-                        <th style="padding:10px;">SOURCE_ID</th>
-                        <th style="padding:10px;">MESSAGE_PAYLOAD</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows || '<tr><td colspan="3" style="text-align:center; padding:20px;">NO DATA INTERCEPTED YET...</td></tr>'}
-                </tbody>
-            </table>
-            <br>
-            <button onclick="location.reload()" style="background:#0f0; color:#000; border:none; padding:10px 20px; cursor:pointer; font-weight:bold;">[ REFRESH_LOGS ]</button>
-            <p style="font-size:12px; color:#050; margin-top:50px;">C:\SYSTEM\DECRYPTOR> _waiting_for_new_data...</p>
+        <body style="background:#050505; color:#0f0; font-family:'Courier New', monospace; padding:20px; margin:0;">
+            <div style="max-width: 1200px; margin: auto;">
+                <h2 style="text-shadow: 0 0 10px #0f0; color:#0f0;">> TERMINAL_SMS_DECRYPTOR v2.0</h2>
+                <div style="background:#0a0; color:#000; padding:5px 10px; font-weight:bold; display:inline-block; margin-bottom:20px;">SYSTEM_STATUS: STABLE</div>
+                
+                <table style="width:100%; border-collapse: collapse; border: 1px solid #0f0; box-shadow: 0 0 20px rgba(0,255,0,0.1);">
+                    <thead>
+                        <tr style="background:#0f0; color:#000; text-align:left; text-transform:uppercase;">
+                            <th style="padding:15px; border: 1px solid #000;">Timestamp</th>
+                            <th style="padding:15px; border: 1px solid #000;">Source_Node</th>
+                            <th style="padding:15px; border: 1px solid #000;">Data_Payload</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows || '<tr><td colspan="3" style="text-align:center; padding:30px; color:#050;">AWAITING INCOMING TRANSMISSION...</td></tr>'}
+                    </tbody>
+                </table>
+                <br>
+                <button onclick="location.reload()" style="background:transparent; color:#0f0; border:1px solid #0f0; padding:10px 25px; cursor:pointer; font-family:monospace; font-weight:bold; transition: 0.3s;" onmouseover="this.style.background='#0f0'; this.style.color='#000';" onmouseout="this.style.background='transparent'; this.style.color='#0f0';"> [ REFRESH_SYSTEM ] </button>
+            </div>
         </body>
         `);
     });
